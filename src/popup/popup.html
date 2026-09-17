@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Subtitles Downloader</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="brand">
+        <img src="../../icons/icon32.png" alt="" width="20" height="20" />
+        <span data-i18n="popupTitle"></span>
+      </div>
+      <button id="refresh" class="icon-btn" data-i18n-title="refresh" type="button">&#8635;</button>
+    </header>
+
+    <section id="videoCard" class="card">
+      <div class="card-top">
+        <span id="platformBadge" class="badge"></span>
+        <span id="videoMeta" class="meta"></span>
+      </div>
+      <div id="videoTitle" class="title"></div>
+    </section>
+
+    <section class="controls">
+      <label class="control">
+        <span data-i18n="format"></span>
+        <select id="format">
+          <option value="srt">SRT</option>
+          <option value="vtt">WebVTT</option>
+          <option value="ass">ASS</option>
+          <option value="txt">TXT</option>
+          <option value="original" data-i18n="formatOriginal"></option>
+        </select>
+      </label>
+      <label class="control checkbox">
+        <input type="checkbox" id="saveAs" />
+        <span data-i18n="saveAs"></span>
+      </label>
+    </section>
+
+    <section id="tracksSection" class="section">
+      <h2 data-i18n="tracksTitle"></h2>
+      <ul id="tracks" class="list"></ul>
+      <div id="tracksEmpty" class="empty"></div>
+    </section>
+
+    <section id="translateSection" class="section" hidden>
+      <h2 data-i18n="translate"></h2>
+      <div class="row">
+        <select id="tlang"></select>
+        <button id="translateDownload" class="btn" type="button" data-i18n="download"></button>
+      </div>
+    </section>
+
+    <section id="universalSection" class="section">
+      <h2 data-i18n="universalTitle"></h2>
+      <p id="universalHint" class="hint"></p>
+      <button id="universalToggle" class="btn secondary" type="button"></button>
+      <ul id="universalTracks" class="list"></ul>
+      <div id="universalEmpty" class="empty"></div>
+    </section>
+
+    <div id="status" class="status" hidden></div>
+
+    <script src="../shared/platforms.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,23 @@
+# 의존성 및 빌드 산출물
+node_modules/
+dist/
+*.zip
+*.crx
+*.pem
+
+# 로그 및 임시 파일
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+
+# 편집기 및 도구 설정
+.vscode/
+.idea/
+.claude/
+
+# 환경 파일
+.env
+.env.*

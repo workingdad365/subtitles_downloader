@@ -1,0 +1,10 @@
+{
+  "name": "subtitles_downloader",
+  "version": "1.0.0",
+  "private": true,
+  "description": "YouTube, Netflix, Disney+ 및 일반 사이트 자막 다운로드 크롬 확장 프로그램",
+  "scripts": {
+    "test": "node --test",
+    "icons": "node scripts/make-icons.js"
+  }
+}
