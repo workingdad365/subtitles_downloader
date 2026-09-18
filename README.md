@@ -8,6 +8,8 @@ YouTube, Netflix, Disney+ 및 일반 사이트의 자막을 SRT / WebVTT / ASS /
 | 최소 Chrome | 116 |
 | 의존성 | 없음 (테스트는 Node 18+ 내장 `node --test`) |
 
+<img src="screenshot.jpg" style="width: 30%;" />
+
 ## 설치
 
 1. `chrome://extensions` 접속 후 우측 상단 **개발자 모드** 활성화
