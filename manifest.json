@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "__MSG_extName__",
   "description": "__MSG_extDescription__",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "default_locale": "en",
   "minimum_chrome_version": "116",
   "icons": {
@@ -12,7 +12,6 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_popup": "src/popup/popup.html",
     "default_title": "__MSG_actionTitle__",
     "default_icon": {
       "16": "icons/icon16.png",
@@ -24,7 +23,7 @@
   "background": {
     "service_worker": "src/background/service-worker.js"
   },
-  "permissions": ["storage", "downloads", "webRequest", "tabs"],
+  "permissions": ["storage", "webRequest", "tabs"],
   "host_permissions": [
     "*://*.youtube.com/*",
     "*://*.netflix.com/*",

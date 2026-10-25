@@ -6,7 +6,10 @@
   const t = (key, subs) => chrome.i18n.getMessage(key, subs) || key;
   const $ = (id) => document.getElementById(id);
 
-  const state = { tab: null, platform: null, native: null, universal: null, settings: { format: "srt", saveAs: false }, busy: false };
+  const state = { tab: null, platform: null, native: null, universal: null, settings: { format: "srt" }, busy: false };
+  let directory = null;
+  const controller = new AbortController();
+  window.addEventListener("pagehide", () => controller.abort());
 
   let displayNames = null;
   try {
@@ -60,7 +63,7 @@
 
   function setBusy(busy) {
     state.busy = busy;
-    document.querySelectorAll("button.btn").forEach((b) => {
+    document.querySelectorAll("button, select").forEach((b) => {
       b.disabled = busy;
     });
   }
@@ -202,9 +205,8 @@
   // -------------------------------------------------------------------------
 
   async function loadSettings() {
-    state.settings = await chrome.storage.local.get({ format: "srt", saveAs: false });
+    state.settings = await chrome.storage.local.get({ format: "srt" });
     $("format").value = state.settings.format;
-    $("saveAs").checked = !!state.settings.saveAs;
   }
 
   async function refresh() {
@@ -229,6 +231,13 @@
   // 다운로드
   // -------------------------------------------------------------------------
 
+  async function chooseDirectory() {
+    if (!window.showDirectoryPicker) throw new Error(t("errFolderUnsupported"));
+    const selected = await window.showDirectoryPicker({ id: "subtitles", mode: "readwrite", startIn: "downloads" });
+    directory = selected;
+    $("folderName").textContent = selected.name;
+  }
+
   async function runDownload(btn, request) {
     if (state.busy) return;
     setBusy(true);
@@ -236,11 +245,16 @@
     if (btn) btn.textContent = t("downloading");
     setStatus(t("downloading"));
     try {
+      if (!directory) await chooseDirectory();
+      else if (await directory.requestPermission({ mode: "readwrite" }) !== "granted") throw new Error(t("errFolderPermission"));
       const res = await request();
       if (!res || !res.ok) throw new Error((res && res.error) || t("errUnknown"));
-      setStatus(t("downloaded", [res.filename]), "ok");
+      if (typeof res.content !== "string" || !res.filename) throw new Error(t("errEmpty"));
+      const filename = await FolderWriter.write(directory, res.filename, res.content, { signal: controller.signal });
+      setStatus(t("downloaded", [filename]), "ok");
     } catch (err) {
-      setStatus(`${t("errPrefix")} ${err && err.message ? err.message : String(err)}`, "err");
+      if (err.name === "NotAllowedError") directory = null;
+      setStatus(err.name === "AbortError" ? t("saveCancelled") : `${t("errPrefix")} ${err && err.message ? err.message : String(err)}`, err.name === "AbortError" ? "" : "err");
     } finally {
       if (btn) btn.textContent = original;
       setBusy(false);
@@ -248,11 +262,11 @@
   }
 
   function downloadNative(track, btn, tlang) {
-    return runDownload(btn, () => chrome.tabs.sendMessage(state.tab.id, { type: "DOWNLOAD", track, format: $("format").value, tlang: tlang || null }));
+    return runDownload(btn, () => chrome.tabs.sendMessage(state.tab.id, { type: "PREPARE_SUBTITLE", track, format: $("format").value, tlang: tlang || null }));
   }
 
   function downloadUniversal(track, btn) {
-    return runDownload(btn, () => chrome.runtime.sendMessage({ type: "DOWNLOAD_UNIVERSAL", tabId: state.tab.id, trackId: track.id, format: $("format").value }));
+    return runDownload(btn, () => chrome.runtime.sendMessage({ type: "PREPARE_UNIVERSAL_SUBTITLE", tabId: state.tab.id, trackId: track.id, format: $("format").value }));
   }
 
   async function toggleUniversal() {
@@ -278,7 +292,9 @@
   async function init() {
     applyI18n();
     await loadSettings();
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const params = new URLSearchParams(location.search);
+    const tabId = Number(params.get("tabId"));
+    const tab = params.has("tabId") && Number.isInteger(tabId) && tabId >= 0 ? await chrome.tabs.get(tabId) : null;
     state.tab = tab || null;
     state.platform = tab && tab.url ? Platforms.detect(tab.url) : null;
     if (!tab || !tab.url || !/^https?:/.test(tab.url)) {
@@ -289,7 +305,18 @@
       return;
     }
     $("format").addEventListener("change", () => chrome.storage.local.set({ format: $("format").value }));
-    $("saveAs").addEventListener("change", () => chrome.storage.local.set({ saveAs: $("saveAs").checked }));
+    $("chooseFolder").addEventListener("click", async () => {
+      if (state.busy) return;
+      setBusy(true);
+      try {
+        await chooseDirectory();
+        setStatus("");
+      } catch (err) {
+        setStatus(err.name === "AbortError" ? t("saveCancelled") : `${t("errPrefix")} ${err.message}`, err.name === "AbortError" ? "" : "err");
+      } finally {
+        setBusy(false);
+      }
+    });
     $("refresh").addEventListener("click", async () => {
       if (state.platform) {
         try {

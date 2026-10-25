@@ -4,7 +4,7 @@ YouTube, Netflix, Disney+ 및 일반 사이트의 자막을 SRT / WebVTT / ASS /
 
 | 항목 | 내용 |
 | --- | --- |
-| 버전 | 1.0.0 |
+| 버전 | 1.0.1 |
 | 최소 Chrome | 116 |
 | 의존성 | 없음 (테스트는 Node 18+ 내장 `node --test`) |
 
@@ -19,13 +19,14 @@ YouTube, Netflix, Disney+ 및 일반 사이트의 자막을 SRT / WebVTT / ASS /
 ## 사용법
 
 1. 지원 플랫폼에서 영상을 재생 (자막 목록은 플레이어가 매니페스트를 요청하는 시점에 수집됨)
-2. 툴바 아이콘 클릭 → 포맷 선택 → 원하는 언어 트랙의 **다운로드** 클릭
-3. 파일은 기본 다운로드 폴더에 `<제목>.srt` (시리즈는 `<제목> S01E02.srt`) 이름으로 저장됨
-4. 같은 영상의 다른 언어를 이어서 받으면 Chrome이 `<제목> (1).srt`처럼 번호를 붙임
+2. 툴바 아이콘을 눌러 별도 저장 창을 열고 포맷을 선택한 뒤 원하는 언어 트랙의 **다운로드** 클릭
+3. 첫 다운로드 시 저장 폴더 선택. 같은 창에서 이어서 받는 자막은 선택한 폴더를 계속 사용하며 **저장 폴더 선택**으로 변경 가능함
+4. 파일은 선택한 폴더에 `<제목>.srt` (시리즈는 `<제목> S01E02.srt`) 이름으로 저장됨. 기존 파일이 있으면 `<제목> (1).srt`처럼 번호를 붙여 보존함
+5. 저장 완료가 표시될 때까지 저장 창을 열어 둠. 폴더 선택을 취소하면 자막 취득과 파일 저장을 시작하지 않음
 
 팝업 옵션
 - **포맷**: SRT, WebVTT, ASS, TXT, 원본(플랫폼이 제공한 파일 그대로)
-- **저장 위치 묻기**: 켜면 매번 저장 대화상자가 열림
+- **저장 폴더 선택**: 직접 저장할 폴더를 선택하거나 변경함
 - **새로고침**: 트랙 목록을 다시 요청함
 
 ### YouTube 자동 번역
@@ -70,12 +71,13 @@ src/shared/formats.js            자막 포맷 파서/직렬화기 (VTT, SRT, TT
 src/shared/hls.js                m3u8 마스터/미디어 플레이리스트 파서
 src/shared/dash.js               MPD 텍스트 트랙 파서
 src/shared/filename.js           저장 파일명 생성 (서비스 접미사 제거 포함)
+src/shared/folder-writer.js      폴더 직접 저장, 중복 파일명 처리 및 실패 파일 정리
 src/shared/platforms.js          플랫폼 정의 및 URL 판별 (enabled 플래그)
 src/injectors/_common.js         MAIN world 공용 훅 헬퍼 (fetch/XHR/JSON.parse/Response.json, postMessage)
 src/injectors/<platform>.js      플랫폼별 트랙 수집 인젝터
-src/content/content-script.js    ISOLATED world: 인젝터 ↔ 팝업 중계, 다운로드 파이프라인, 파일 저장
-src/background/service-worker.js 프록시 fetch, downloads API 저장, 네이티브 폴백 및 범용 감지
-src/popup/                       팝업 UI
+src/content/content-script.js    ISOLATED world: 인젝터 및 저장 창 중계, 자막 취득과 변환
+src/background/service-worker.js 프록시 fetch, 저장 창 열기, 네이티브 폴백 및 범용 감지
+src/popup/                       저장 창 UI 및 폴더 직접 저장
 test/                            Node 유닛 테스트
 ```
 
@@ -83,12 +85,12 @@ test/                            Node 유닛 테스트
 
 ```
 인젝터(MAIN) --postMessage(TRACKS, VIDEO_INFO)--> 콘텐츠 스크립트(ISOLATED)
-팝업 --GET_STATE / DOWNLOAD--> 콘텐츠 스크립트 --PROXY_FETCH--> 서비스 워커
+저장 창 --GET_STATE / PREPARE_SUBTITLE--> 콘텐츠 스크립트 --PROXY_FETCH--> 서비스 워커
 서비스 워커 --FALLBACK_TRACKS / NETFLIX_SUBTITLE_REQUEST--> 콘텐츠 스크립트 (webRequest 폴백)
-팝업 --GET_UNIVERSAL_STATE / DOWNLOAD_UNIVERSAL--> 서비스 워커 (일반 사이트)
+저장 창 --GET_UNIVERSAL_STATE / PREPARE_UNIVERSAL_SUBTITLE--> 서비스 워커 (일반 사이트)
 ```
 
-파일 저장은 플랫폼 페이지에서는 콘텐츠 스크립트가 Blob + `<a download>`로 수행함. MV3 서비스 워커의 `chrome.downloads.download`(data URL)는 파일명이 무시되는 경우가 있어, 백그라운드 경로("저장 위치 묻기", 일반 사이트)에서는 `onDeterminingFilename`으로 파일명을 다시 제안함.
+플랫폼 자막과 일반 사이트 자막 모두 변환한 텍스트를 저장 창으로 반환하고, `File System Access API`로 선택한 폴더에 직접 기록함. Imageye 등 다른 확장의 다운로드 파일명 변경에 영향을 받지 않으며 Chrome 다운로드 목록에는 표시되지 않음. 쓰기 완료 후에만 성공을 표시하며 오류 시 새로 만든 미완성 파일을 정리함. 저장 창을 닫으면 진행 중인 저장도 중단됨.
 
 ## 개발
 

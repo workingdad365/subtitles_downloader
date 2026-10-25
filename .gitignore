@@ -1,4 +1,5 @@
 # 의존성 및 빌드 산출물
+.*/
 node_modules/
 dist/
 *.zip

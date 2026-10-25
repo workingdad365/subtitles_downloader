@@ -1,5 +1,5 @@
 // 콘텐츠 스크립트 (ISOLATED world)
-// 인젝터가 postMessage로 보내는 트랙/영상 정보를 수집하고, 팝업 요청에 따라 자막을 받아 변환 후 저장을 요청함
+// 인젝터가 postMessage로 보내는 트랙/영상 정보를 수집하고, 저장 창 요청에 따라 자막을 받아 변환한 텍스트를 반환함
 (() => {
   "use strict";
 
@@ -231,7 +231,7 @@
     }
   }
 
-  async function handleDownload({ track, format, tlang }) {
+  async function prepareSubtitle({ track, format, tlang }) {
     if (!track) throw new Error(t("errUnsupported"));
     const effective = tlang ? { ...track, language: tlang, source: "translated" } : track;
     const result = await acquire(effective, tlang);
@@ -246,40 +246,8 @@
       ext,
     });
     const content = useRaw ? result.raw : SubtitleFormats.serialize(result.cues, format, info.title || "Subtitles");
-    log("saving", filename, `${content.length} chars`);
-    await saveFile(filename, content);
-    return { filename, cueCount: result.cues ? result.cues.length : 0 };
-  }
-
-  // 페이지 컨텍스트에서 Blob + 앵커 클릭으로 저장 (download 속성이 파일명을 결정함)
-  function saveViaPage(filename, content) {
-    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.style.display = "none";
-    (document.body || document.documentElement).appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 15000);
-  }
-
-  // 기본은 페이지 저장, "저장 위치 묻기"가 켜져 있거나 페이지 저장이 실패하면 백그라운드 downloads API 사용
-  async function saveFile(filename, content) {
-    const settings = await chrome.storage.local.get({ saveAs: false });
-    if (!settings.saveAs) {
-      try {
-        saveViaPage(filename, content);
-        log("saved via page", filename);
-        return;
-      } catch (err) {
-        log("page save failed, falling back to background", err);
-      }
-    }
-    const saved = await chrome.runtime.sendMessage({ type: "SAVE_FILE", filename, content });
-    if (!saved || !saved.ok) throw new Error((saved && saved.error) || "save failed");
-    log("saved via background", filename);
+    log("prepared", filename, `${content.length} chars`);
+    return { filename, content, cueCount: result.cues ? result.cues.length : 0 };
   }
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -314,8 +282,8 @@
       sendResponse({ ok: true });
       return false;
     }
-    if (msg.type === "DOWNLOAD") {
-      handleDownload(msg)
+    if (msg.type === "PREPARE_SUBTITLE") {
+      prepareSubtitle(msg)
         .then((r) => sendResponse({ ok: true, ...r }))
         .catch((err) => sendResponse({ ok: false, error: err && err.message ? err.message : String(err) }));
       return true;

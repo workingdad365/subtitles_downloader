@@ -1,5 +1,5 @@
 // 백그라운드 서비스 워커
-// 역할: CORS 우회 프록시 fetch, 파일 저장(chrome.downloads), 범용 자막 감지(webRequest, 선택 권한 <all_urls>)
+// 역할: CORS 우회 프록시 fetch, 자막 텍스트 준비, 범용 자막 감지(webRequest, 선택 권한 <all_urls>)
 importScripts(
   "../shared/formats.js",
   "../shared/hls.js",
@@ -8,7 +8,7 @@ importScripts(
   "../shared/platforms.js",
 );
 
-const SETTINGS_DEFAULTS = { format: "srt", saveAs: false };
+const SETTINGS_DEFAULTS = { format: "srt" };
 const MAX_TRACKS_PER_TAB = 40;
 const MAX_TEXT_BYTES = 8 * 1024 * 1024;
 
@@ -70,53 +70,18 @@ async function fetchAll(urls, concurrency) {
   return results;
 }
 
-function bytesToBase64(bytes) {
-  let binary = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
-}
-
 async function getSettings() {
   return chrome.storage.local.get(SETTINGS_DEFAULTS);
 }
 
-// downloads.download의 filename이 무시되는 경우를 대비해 onDeterminingFilename에서 파일명을 다시 제안함
-const pendingDownloadNames = new Map();
-
-chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
-  const name = pendingDownloadNames.get(item.url) || pendingDownloadNames.get(item.finalUrl);
-  if (!name) return;
-  pendingDownloadNames.delete(item.url);
-  pendingDownloadNames.delete(item.finalUrl);
-  console.info("[subtitles_downloader] onDeterminingFilename ->", name);
-  suggest({ filename: name, conflictAction: "uniquify" });
+// 폴더 선택 대화상자와 저장 중에도 닫히지 않는 전용 창을 생성함
+chrome.action.onClicked.addListener((tab) => {
+  if (!Number.isInteger(tab.id)) return;
+  chrome.windows.create({
+    url: chrome.runtime.getURL(`src/popup/popup.html?tabId=${tab.id}`),
+    type: "popup", width: 440, height: 680,
+  });
 });
-
-async function saveFile(filename, content) {
-  const settings = await getSettings();
-  const bytes = new TextEncoder().encode(content);
-  const url = `data:text/plain;charset=utf-8;base64,${bytesToBase64(bytes)}`;
-  let name = FilenameUtils.sanitize(filename || "");
-  if (!name) name = "subtitle.srt";
-  console.info("[subtitles_downloader] download", JSON.stringify(name), `${bytes.length} bytes`);
-  pendingDownloadNames.set(url, name);
-  setTimeout(() => pendingDownloadNames.delete(url), 60000);
-  try {
-    const id = await chrome.downloads.download({ url, filename: name, saveAs: !!settings.saveAs, conflictAction: "uniquify" });
-    console.info("[subtitles_downloader] download started, id", id);
-  } catch (err) {
-    // 파일명이 거부된 경우 ASCII 안전 이름으로 재시도
-    console.warn("[subtitles_downloader] download failed for", JSON.stringify(name), err);
-    const ext = (name.match(/\.([a-z0-9]+)$/i) || [])[1] || "srt";
-    const fallback = `subtitle_${Date.now()}.${ext}`;
-    pendingDownloadNames.set(url, fallback);
-    await chrome.downloads.download({ url, filename: fallback, saveAs: !!settings.saveAs, conflictAction: "uniquify" });
-    console.info("[subtitles_downloader] download retried as", fallback);
-  }
-}
 
 function broadcast(message) {
   chrome.runtime.sendMessage(message).catch(() => {});
@@ -384,7 +349,7 @@ function universalState(tabId) {
   return { enabled: universalEnabled, title: entry ? entry.title : null, tracks };
 }
 
-async function downloadUniversal({ tabId, trackId, format }) {
+async function prepareUniversal({ tabId, trackId, format }) {
   const entry = universalTabs.get(tabId);
   const track = entry ? entry.tracks.get(trackId) : null;
   if (!track) throw new Error("track not found");
@@ -418,8 +383,7 @@ async function downloadUniversal({ tabId, trackId, format }) {
   const title = FilenameUtils.cleanTitle(entry.title) || "subtitle";
   const ext = useRaw ? SubtitleFormats.rawExtensionFor(rawFormat) : SubtitleFormats.extensionFor(format);
   const filename = FilenameUtils.buildFilename({ title, ext });
-  await saveFile(filename, useRaw ? raw : SubtitleFormats.serialize(cues, format, title));
-  return { filename, cueCount: cues.length };
+  return { filename, content: useRaw ? raw : SubtitleFormats.serialize(cues, format, title), cueCount: cues.length };
 }
 
 // ---------------------------------------------------------------------------
@@ -434,16 +398,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         .then((r) => sendResponse({ ok: true, ...r }))
         .catch((err) => sendResponse({ ok: false, error: err.message, status: err.status || 0 }));
       return true;
-    case "SAVE_FILE":
-      saveFile(msg.filename, msg.content)
-        .then(() => sendResponse({ ok: true }))
-        .catch((err) => sendResponse({ ok: false, error: err.message }));
-      return true;
     case "GET_UNIVERSAL_STATE":
       sendResponse(universalState(msg.tabId));
       return false;
-    case "DOWNLOAD_UNIVERSAL":
-      downloadUniversal(msg)
+    case "PREPARE_UNIVERSAL_SUBTITLE":
+      prepareUniversal(msg)
         .then((r) => sendResponse({ ok: true, ...r }))
         .catch((err) => sendResponse({ ok: false, error: err.message }));
       return true;

@@ -34,11 +34,9 @@
           <option value="original" data-i18n="formatOriginal"></option>
         </select>
       </label>
-      <label class="control checkbox">
-        <input type="checkbox" id="saveAs" />
-        <span data-i18n="saveAs"></span>
-      </label>
+      <button id="chooseFolder" class="btn" type="button" data-i18n="chooseFolder"></button>
     </section>
+    <section class="section"><p id="folderName" class="hint" data-i18n="folderHint"></p><p class="hint" data-i18n="keepWindowOpen"></p></section>
 
     <section id="tracksSection" class="section">
       <h2 data-i18n="tracksTitle"></h2>
@@ -65,6 +63,7 @@
     <div id="status" class="status" hidden></div>
 
     <script src="../shared/platforms.js"></script>
+    <script src="../shared/folder-writer.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

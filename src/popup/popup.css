@@ -31,8 +31,7 @@
 
 body {
   margin: 0;
-  width: 380px;
-  max-height: 580px;
+  min-width: 340px;
   overflow-y: auto;
   background: var(--bg);
   color: var(--fg);
@@ -239,6 +238,7 @@ body {
 }
 
 .hint {
+  overflow-wrap: anywhere;
   margin: 0 0 8px;
   color: var(--muted);
   font-size: 12px;
