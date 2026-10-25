@@ -231,11 +231,17 @@
   // 다운로드
   // -------------------------------------------------------------------------
 
+  function renderFolder() {
+    $("folderName").textContent = directory ? t("selectedFolder", [directory.name]) : t("folderHint");
+    $("chooseFolder").textContent = t(directory ? "changeFolder" : "chooseFolder");
+  }
+
   async function chooseDirectory() {
     if (!window.showDirectoryPicker) throw new Error(t("errFolderUnsupported"));
     const selected = await window.showDirectoryPicker({ id: "subtitles", mode: "readwrite", startIn: "downloads" });
+    await FolderStore.save(selected);
     directory = selected;
-    $("folderName").textContent = selected.name;
+    renderFolder();
   }
 
   async function runDownload(btn, request) {
@@ -245,16 +251,15 @@
     if (btn) btn.textContent = t("downloading");
     setStatus(t("downloading"));
     try {
-      if (!directory) await chooseDirectory();
-      else if (await directory.requestPermission({ mode: "readwrite" }) !== "granted") throw new Error(t("errFolderPermission"));
+      if (!await FolderStore.canReuse(directory)) await chooseDirectory();
       const res = await request();
       if (!res || !res.ok) throw new Error((res && res.error) || t("errUnknown"));
       if (typeof res.content !== "string" || !res.filename) throw new Error(t("errEmpty"));
       const filename = await FolderWriter.write(directory, res.filename, res.content, { signal: controller.signal });
       setStatus(t("downloaded", [filename]), "ok");
     } catch (err) {
-      if (err.name === "NotAllowedError") directory = null;
-      setStatus(err.name === "AbortError" ? t("saveCancelled") : `${t("errPrefix")} ${err && err.message ? err.message : String(err)}`, err.name === "AbortError" ? "" : "err");
+      const reason = err.name === "NotAllowedError" ? t("errFolderPermission") : err.message || String(err);
+      setStatus(err.name === "AbortError" ? t("saveCancelled") : `${t("errPrefix")} ${reason}`, err.name === "AbortError" ? "" : "err");
     } finally {
       if (btn) btn.textContent = original;
       setBusy(false);
@@ -291,7 +296,12 @@
 
   async function init() {
     applyI18n();
-    await loadSettings();
+    setBusy(true);
+    await Promise.all([
+      loadSettings(),
+      FolderStore.load().then((saved) => { directory = saved; }).catch((err) => setStatus(`${t("errPrefix")} ${err.message}`, "err"))
+    ]);
+    renderFolder();
     const params = new URLSearchParams(location.search);
     const tabId = Number(params.get("tabId"));
     const tab = params.has("tabId") && Number.isInteger(tabId) && tabId >= 0 ? await chrome.tabs.get(tabId) : null;
@@ -341,5 +351,5 @@
     await refresh();
   }
 
-  init().catch((err) => setStatus(`${t("errPrefix")} ${err.message}`, "err"));
+  init().catch((err) => setStatus(`${t("errPrefix")} ${err.message}`, "err")).finally(() => setBusy(false));
 })();

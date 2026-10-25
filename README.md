@@ -4,7 +4,7 @@ YouTube, Netflix, Disney+ 및 일반 사이트의 자막을 SRT / WebVTT / ASS /
 
 | 항목 | 내용 |
 | --- | --- |
-| 버전 | 1.0.1 |
+| 버전 | 1.0.2 |
 | 최소 Chrome | 116 |
 | 의존성 | 없음 (테스트는 Node 18+ 내장 `node --test`) |
 
@@ -20,13 +20,13 @@ YouTube, Netflix, Disney+ 및 일반 사이트의 자막을 SRT / WebVTT / ASS /
 
 1. 지원 플랫폼에서 영상을 재생 (자막 목록은 플레이어가 매니페스트를 요청하는 시점에 수집됨)
 2. 툴바 아이콘을 눌러 별도 저장 창을 열고 포맷을 선택한 뒤 원하는 언어 트랙의 **다운로드** 클릭
-3. 첫 다운로드 시 저장 폴더 선택. 같은 창에서 이어서 받는 자막은 선택한 폴더를 계속 사용하며 **저장 폴더 선택**으로 변경 가능함
+3. 첫 다운로드 시 저장 폴더 선택. 창이나 Chrome을 다시 열어도 기억한 폴더를 계속 사용하며 **폴더 변경**으로 변경 가능함. 권한이 만료되면 다운로드 시 접근 허용을 다시 요청하고, 폴더가 삭제되면 새 폴더를 선택함
 4. 파일은 선택한 폴더에 `<제목>.srt` (시리즈는 `<제목> S01E02.srt`) 이름으로 저장됨. 기존 파일이 있으면 `<제목> (1).srt`처럼 번호를 붙여 보존함
 5. 저장 완료가 표시될 때까지 저장 창을 열어 둠. 폴더 선택을 취소하면 자막 취득과 파일 저장을 시작하지 않음
 
 팝업 옵션
 - **포맷**: SRT, WebVTT, ASS, TXT, 원본(플랫폼이 제공한 파일 그대로)
-- **저장 폴더 선택**: 직접 저장할 폴더를 선택하거나 변경함
+- **저장 폴더 선택 / 폴더 변경**: 직접 저장할 폴더를 선택하고 기억함. 변경을 취소하면 기존 폴더를 유지함
 - **새로고침**: 트랙 목록을 다시 요청함
 
 ### YouTube 자동 번역
@@ -72,6 +72,7 @@ src/shared/hls.js                m3u8 마스터/미디어 플레이리스트 파
 src/shared/dash.js               MPD 텍스트 트랙 파서
 src/shared/filename.js           저장 파일명 생성 (서비스 접미사 제거 포함)
 src/shared/folder-writer.js      폴더 직접 저장, 중복 파일명 처리 및 실패 파일 정리
+src/shared/folder-store.js       IndexedDB 폴더 핸들 보관 및 접근 권한 확인
 src/shared/platforms.js          플랫폼 정의 및 URL 판별 (enabled 플래그)
 src/injectors/_common.js         MAIN world 공용 훅 헬퍼 (fetch/XHR/JSON.parse/Response.json, postMessage)
 src/injectors/<platform>.js      플랫폼별 트랙 수집 인젝터
