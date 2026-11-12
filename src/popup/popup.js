@@ -8,6 +8,7 @@
 
   const state = { tab: null, platform: null, native: null, universal: null, settings: { format: "srt" }, busy: false };
   let directory = null;
+  let savedFile = null;
   const controller = new AbortController();
   window.addEventListener("pagehide", () => controller.abort());
 
@@ -48,17 +49,13 @@
     });
   }
 
-  function setStatus(text, kind) {
+  function setStatus(text, kind, file = null) {
+    savedFile = file;
+    $("statusText").textContent = text || "";
+    $("openFolder").hidden = !file;
     const el = $("status");
-    if (!text) {
-      el.hidden = true;
-      el.textContent = "";
-      el.className = "status";
-      return;
-    }
-    el.hidden = false;
-    el.textContent = text;
-    el.className = `status ${kind || ""}`;
+    el.hidden = !text;
+    el.className = text && kind ? `status ${kind}` : "status";
   }
 
   function setBusy(busy) {
@@ -244,6 +241,22 @@
     renderFolder();
   }
 
+  async function openFolder() {
+    if (state.busy || !savedFile) return;
+    const file = savedFile;
+    const completed = t("downloaded", [file.filename]);
+    setBusy(true);
+    setStatus(completed, "ok", file);
+    try {
+      // 클릭 직후 호출하여 파일 선택창에 필요한 사용자 활성화를 유지함
+      await window.showOpenFilePicker({ startIn: file.directory, multiple: false });
+    } catch (err) {
+      if (err.name !== "AbortError") setStatus(`${completed}\n${t("errOpenFolder")}`, "err", file);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function runDownload(btn, request) {
     if (state.busy) return;
     setBusy(true);
@@ -255,8 +268,9 @@
       const res = await request();
       if (!res || !res.ok) throw new Error((res && res.error) || t("errUnknown"));
       if (typeof res.content !== "string" || !res.filename) throw new Error(t("errEmpty"));
-      const filename = await FolderWriter.write(directory, res.filename, res.content, { signal: controller.signal });
-      setStatus(t("downloaded", [filename]), "ok");
+      const destination = directory;
+      const filename = await FolderWriter.write(destination, res.filename, res.content, { signal: controller.signal });
+      setStatus(t("downloaded", [filename]), "ok", { directory: destination, filename });
     } catch (err) {
       const reason = err.name === "NotAllowedError" ? t("errFolderPermission") : err.message || String(err);
       setStatus(err.name === "AbortError" ? t("saveCancelled") : `${t("errPrefix")} ${reason}`, err.name === "AbortError" ? "" : "err");
@@ -315,6 +329,7 @@
       return;
     }
     $("format").addEventListener("change", () => chrome.storage.local.set({ format: $("format").value }));
+    $("openFolder").addEventListener("click", openFolder);
     $("chooseFolder").addEventListener("click", async () => {
       if (state.busy) return;
       setBusy(true);

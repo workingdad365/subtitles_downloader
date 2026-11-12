@@ -79,7 +79,7 @@ function directoryHandle(name = "선택한 폴더") {
 }
 
 function popup({ universal = false, cancel = false, writeError = false, writeGate, storage = {},
-  selected = directoryHandle(), loadGate, saveError = false } = {}) {
+  selected = directoryHandle(), loadGate, saveError = false, openPicker = async () => [] } = {}) {
   const elements = new Map();
   const created = [];
   function element() {
@@ -90,9 +90,14 @@ function popup({ universal = false, cancel = false, writeError = false, writeGat
       click() { if (!this.disabled) return listeners.get("click")?.(); }
     };
   }
-  for (const id of source("src/popup/popup.html").matchAll(/id="([^"]+)"/g)) elements.set(id[1], element());
+  for (const match of source("src/popup/popup.html").matchAll(/id="([^"]+)"([^>]*)/g)) {
+    const el = element();
+    el.hidden = /\bhidden\b/.test(match[2]);
+    elements.set(match[1], el);
+  }
   const requests = [];
   const writes = [];
+  const opened = [];
   let picked = 0;
   const track = { id: "track", language: "ko", source: "primary", format: "srt" };
   const context = vm.createContext({
@@ -107,6 +112,10 @@ function popup({ universal = false, cancel = false, writeError = false, writeGat
         picked += 1;
         if (cancel) throw new DOMException("cancel", "AbortError");
         return selected;
+      },
+      async showOpenFilePicker(options) {
+        opened.push(options);
+        return openPicker(options);
       }
     },
     location: { search: "?tabId=7" }, URLSearchParams, Intl, AbortController, Platforms,
@@ -146,7 +155,7 @@ function popup({ universal = false, cancel = false, writeError = false, writeGat
     }
   });
   vm.runInContext(source("src/popup/popup.js"), context);
-  return { elements, requests, writes, storage, picked: () => picked,
+  return { elements, requests, writes, opened, storage, picked: () => picked,
     download: () => elements.get(universal ? "universalTracks" : "tracks").children[0].children[1].click() };
 }
 
@@ -156,7 +165,8 @@ test("폴더 선택 취소 시 자막 요청과 파일 쓰기를 실행하지 �
   await fixture.download();
   assert.equal(fixture.requests.length, 0);
   assert.equal(fixture.writes.length, 0);
-  assert.equal(fixture.elements.get("status").textContent, "saveCancelled");
+  assert.equal(fixture.elements.get("statusText").textContent, "saveCancelled");
+  assert.equal(fixture.elements.get("openFolder").hidden, true);
 });
 
 test("네이티브와 범용 자막 모두 선택한 폴더에 저장하고 같은 창에서는 재사용", async () => {
@@ -170,7 +180,8 @@ test("네이티브와 범용 자막 모두 선택한 폴더에 저장하고 같�
     assert.equal(fixture.writes[0].directory, "선택한 폴더");
     assert.equal(fixture.writes[0].content, text);
     assert.equal(fixture.requests[0].type, universal ? "PREPARE_UNIVERSAL_SUBTITLE" : "PREPARE_SUBTITLE");
-    assert.equal(fixture.elements.get("status").textContent, "downloaded:제목 (1).srt");
+    assert.equal(fixture.elements.get("statusText").textContent, "downloaded:제목 (1).srt");
+    assert.equal(fixture.elements.get("openFolder").hidden, false);
   }
 });
 
@@ -178,18 +189,90 @@ test("쓰기 완료 전에는 성공 표시 없이 조작을 잠그고 실패 �
   let finish;
   const fixture = popup({ writeGate: new Promise((resolve) => { finish = resolve; }) });
   await tick();
+  assert.equal(fixture.elements.get("openFolder").hidden, true);
   const downloading = fixture.download();
   await tick();
   assert.equal(fixture.elements.get("chooseFolder").disabled, true);
-  assert.equal(fixture.elements.get("status").textContent, "downloading");
+  assert.equal(fixture.elements.get("statusText").textContent, "downloading");
+  assert.equal(fixture.elements.get("openFolder").hidden, true);
   finish();
   await downloading;
   assert.equal(fixture.elements.get("chooseFolder").disabled, false);
+  assert.equal(fixture.elements.get("openFolder").hidden, false);
+  const nextDownload = fixture.download();
+  assert.equal(fixture.elements.get("openFolder").hidden, true);
+  await nextDownload;
+  assert.equal(fixture.elements.get("openFolder").hidden, false);
   const failed = popup({ writeError: true });
   await tick();
   await failed.download();
-  assert.match(failed.elements.get("status").textContent, /errPrefix.*errFolderPermission/);
+  assert.match(failed.elements.get("statusText").textContent, /errPrefix.*errFolderPermission/);
+  assert.equal(failed.elements.get("openFolder").hidden, true);
   assert.equal(failed.elements.get("chooseFolder").disabled, false);
+});
+
+test("자막 폴더 열기는 저장한 폴더에서 시작하며 파일 선택과 취소는 저장 상태를 유지", async () => {
+  for (const universal of [false, true]) {
+    for (const cancel of [false, true]) {
+      const selected = directoryHandle();
+      const fixture = popup({ universal, selected, async openPicker() {
+        if (cancel) throw new DOMException("cancel", "AbortError");
+        return [{ name: "다른 파일.txt" }];
+      } });
+      await tick();
+      await fixture.download();
+      const opening = fixture.elements.get("openFolder").click();
+      // 비동기 작업을 거치기 전에 파일 선택창을 호출하는지 확인함
+      assert.equal(fixture.opened.length, 1);
+      assert.equal(fixture.opened[0].startIn, selected);
+      assert.equal(fixture.opened[0].multiple, false);
+      await opening;
+      assert.equal(fixture.elements.get("statusText").textContent, "downloaded:제목 (1).srt");
+      assert.equal(fixture.elements.get("status").className, "status ok");
+      assert.equal(fixture.elements.get("openFolder").hidden, false);
+      assert.equal(fixture.elements.get("openFolder").disabled, false);
+      assert.equal(fixture.storage.directory, selected);
+      assert.equal(fixture.requests.length, 1);
+      assert.equal(fixture.writes.length, 1);
+      assert.equal(fixture.picked(), 1);
+      await fixture.elements.get("chooseFolder").click();
+      assert.equal(fixture.elements.get("status").hidden, true);
+      assert.equal(fixture.elements.get("openFolder").hidden, true);
+      await fixture.elements.get("openFolder").click();
+      assert.equal(fixture.opened.length, 1);
+    }
+  }
+});
+
+test("파일 선택창 중복 열기를 막고 실패해도 저장 완료 파일명과 재시도 버튼을 유지", async () => {
+  let finish;
+  const gate = new Promise((resolve) => { finish = resolve; });
+  let fail = true;
+  const fixture = popup({ async openPicker() {
+    await gate;
+    if (fail) throw new DOMException("blocked", "SecurityError");
+    return [];
+  } });
+  await tick();
+  await fixture.download();
+  const button = fixture.elements.get("openFolder");
+  const opening = button.click();
+  assert.equal(button.disabled, true);
+  assert.equal(fixture.elements.get("chooseFolder").disabled, true);
+  await button.click();
+  assert.equal(fixture.opened.length, 1);
+  finish();
+  await opening;
+  assert.equal(fixture.elements.get("statusText").textContent, "downloaded:제목 (1).srt\nerrOpenFolder");
+  assert.equal(button.hidden, false);
+  assert.equal(button.disabled, false);
+  assert.equal(fixture.elements.get("chooseFolder").disabled, false);
+  fail = false;
+  await button.click();
+  assert.equal(fixture.opened.length, 2);
+  assert.equal(fixture.elements.get("statusText").textContent, "downloaded:제목 (1).srt");
+  assert.equal(fixture.elements.get("status").className, "status ok");
+  assert.equal(fixture.writes.length, 1);
 });
 
 test("창을 다시 열어도 네이티브와 범용 자막은 기억한 폴더에 바로 저장", async () => {
@@ -220,7 +303,7 @@ test("기억한 폴더의 권한 거부 시 요청을 중단하고 재허용 시
   assert.equal(requested, 1);
   assert.equal(fixture.requests.length, 0);
   assert.equal(fixture.writes.length, 0);
-  assert.equal(fixture.elements.get("status").textContent, "errPrefix errFolderPermission");
+  assert.equal(fixture.elements.get("statusText").textContent, "errPrefix errFolderPermission");
   assert.equal(fixture.storage.directory, directory);
   permission = "granted";
   await fixture.download();

@@ -254,6 +254,22 @@ body {
   word-break: break-all;
 }
 
+.status:not([hidden]) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#statusText {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-line;
+}
+
+#openFolder {
+  flex-shrink: 0;
+}
+
 .status.ok {
   color: var(--ok);
 }
