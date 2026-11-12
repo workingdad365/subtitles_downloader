@@ -54,6 +54,12 @@ body {
   font-size: 14px;
 }
 
+.version {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
 .icon-btn {
   border: 1px solid var(--border);
   background: transparent;

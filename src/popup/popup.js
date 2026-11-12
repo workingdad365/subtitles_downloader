@@ -310,6 +310,7 @@
 
   async function init() {
     applyI18n();
+    $("version").textContent = `v${chrome.runtime.getManifest().version}`;
     setBusy(true);
     await Promise.all([
       loadSettings(),

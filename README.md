@@ -4,7 +4,7 @@ YouTube, Netflix, Disney+ 및 일반 사이트의 자막을 SRT / WebVTT / ASS /
 
 | 항목 | 내용 |
 | --- | --- |
-| 버전 | 1.0.2 |
+| 버전 | 1.0.3 |
 | 최소 Chrome | 116 |
 | 의존성 | 없음 (테스트는 Node 18+ 내장 `node --test`) |
 

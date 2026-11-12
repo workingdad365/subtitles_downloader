@@ -145,6 +145,7 @@ function popup({ universal = false, cancel = false, writeError = false, writeGat
         }
       },
       runtime: {
+        getManifest: () => JSON.parse(source("manifest.json")),
         onMessage: { addListener() {} },
         async sendMessage(message) {
           if (message.type === "GET_UNIVERSAL_STATE") return { enabled: true, tracks: [track] };
